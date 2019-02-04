@@ -1,5 +1,3 @@
-__precompile__()
-
 module RegisterWorkerAperturesMismatch
 
 using Images, AffineTransforms, Interpolations, StaticArrays
@@ -11,7 +9,7 @@ import RegisterWorkerShell: worker, init!, close!
 
 export AperturesMismatch, monitor, monitor!, worker, workerpid
 
-type AperturesMismatch{A<:AbstractArray,T,K,N} <: AbstractWorker
+mutable struct AperturesMismatch{A<:AbstractArray,T,K,N} <: AbstractWorker
     fixed::A
     knots::NTuple{N,K}
     maxshift::NTuple{N,Int}
@@ -106,7 +104,7 @@ pre-processing function, but see also `PreprocessSNF`.
 ```
 
 """
-function AperturesMismatch{K,N}(fixed, knots::NTuple{N,K}, maxshift, preprocess=identity; normalization=:pixels, thresh_fac=(0.5)^ndims(fixed), thresh=nothing, correctbias::Bool=true, pid=1, dev=-1)
+function AperturesMismatch(fixed, knots::NTuple{N,K}, maxshift, preprocess=identity; normalization=:pixels, thresh_fac=(0.5)^ndims(fixed), thresh=nothing, correctbias::Bool=true, pid=1, dev=-1) where {K,N}
     gridsize = map(length, knots)
     nimages(fixed) == 1 || error("Register to a single image")
     if thresh == nothing
@@ -156,7 +154,7 @@ function worker(algorithm::AperturesMismatch, img, tindex, mon)
     monitor!(mon, :Qs, Qs)
     if haskey(mon, :mmis)
         mmis = interpolate_mm!(mms)
-        R = CartesianRange(size(mon[:mmis])[ndims(mmis)+1:end])
+        R = CartesianIndices(size(mon[:mmis])[ndims(mmis)+1:end])
         colons = ntuple(d->Colon(), ndims(mmis))
         _copy_mm!(mon[:mmis], mmis, colons, R)
     end
@@ -170,10 +168,10 @@ function _copy_mm!(dest, src, colons, R)
     dest
 end
 
-cudatype{T<:Union{Float32,Float64}}(::Type{T}) = T
+cudatype(::Type{T}) where {T<:Union{Float32,Float64}} = T
 cudatype(::Any) = Float32
 
-myconvert{T}(::Type{Array{T}}, A::Array{T}) = A
-myconvert{T}(::Type{Array{T}}, A::AbstractArray) = copy!(Array{T}(size(A)), A)
+myconvert(::Type{Array{T}}, A::Array{T}) where {T} = A
+myconvert(::Type{Array{T}}, A::AbstractArray) where {T} = copy!(Array{T}(size(A)), A)
 
 end # module
