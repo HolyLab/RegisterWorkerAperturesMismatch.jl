@@ -1,15 +1,3 @@
-nt = 3  # number of time points
-wpids = addprocs(min(nt, 3))
-@sync for p in wpids
-    @spawnat p eval(quote
-        using Pkg
-        Pkg.activate(".")
-        Pkg.instantiate()
-        using StaticArrays
-        using RegisterWorkerAperturesMismatch
-    end)
-end
-
 for (sz, mxshift, gridsize, order, steps) in (((150,), (6,), (4,), (:x, :time),(1,1)),
                                     ((150,140), (6,5), (4,3), (:x, :y, :time),(1,1,1)),
                                     ((150,140,15), (6,5,2), (4,3,3), (:x, :y, :z, :time), (1,1,1,1)))
@@ -25,17 +13,10 @@ for (sz, mxshift, gridsize, order, steps) in (((150,), (6,), (4,), (:x, :time),(
     fixed_full = SharedArray{Float64}(fullsz)
     fill!(fixed_full, 1)
     window = ntuple(d->padsz[d]+1:padsz[d]+sz[d], N)
-    offset = ntuple(d->first(to_indices(fixed_full, window)[d])-1,N)
     fixed = view(fixed_full, ntuple(d->padsz[d]+1:padsz[d]+sz[d], N)...)
-    ps2 = ntuple(d->(d<=2) ? 5 : 1,N)
-    ps = ntuple(d->2*ps2[d]+1,N)
-    pattern = rand(ps...).+1.0
-    srcindices = CartesianIndices(ntuple(d->1:ps[d],N))
     for I in CartesianIndices(gridsize)
-        c = [round(Int, knots[d][I[d]])+offset[d] for d = 1:N]
-        #c = [round(Int, knots[d][I[d]])+aperture_center[d] for d = 1:N]
-        destindices = CartesianIndices(ntuple(d->c[d]-ps2[d]:(c[d]+ps2[d]),N))
-        copyto!(fixed_full,destindices,pattern,srcindices)
+        c = [round(Int, knots[d][I[d]]) for d = 1:N]
+        fixed[c...] = 2
     end
 
     # The moving image displaces the bright regions.
@@ -46,27 +27,22 @@ for (sz, mxshift, gridsize, order, steps) in (((150,), (6,), (4,), (:x, :time),(
     fill!(moving_full, 1)
     window = (ntuple(d->padsz[d]+1:padsz[d]+sz[d], N)..., :)
     offset = ntuple(d->first(to_indices(moving_full, window)[d])-1,N)
-    moving = view(moving_full, window...)
-    #moving = unsafe_view(moving_full, to_indices(moving_full,(ntuple(d->OffsetArrays.IdentityUnitRange(padsz[d]+1:padsz[d]+sz[d]), N)...,:))...)
+    pdrng = shiftrange.(axes(moving_full),(.-offset...,0))
+    moving = PaddedView(1, moving_full, pdrng, pdrng)
     displacements = Array{NTuple{N,Array{Int,N}}}(undef, nt)
     for t = 1:nt
         disp = ntuple(d->rand(-mxshift[d]+1:mxshift[d]-1, gridsize), N)
         displacements[t] = disp
-        mf = view(moving_full,ntuple(d->Colon(),N)...,t)
         for I in CartesianIndices(gridsize)
             c = [round(Int, knots[d][I[d]])+disp[d][I]+offset[d] for d = 1:N]
-            destindices = CartesianIndices(ntuple(d->c[d]-ps2[d]:(c[d]+ps2[d]),N))
-            copyto!(mf,destindices,pattern,srcindices)
+            moving_full[c..., t] = 2
         end
     end
-    img = AxisArray(moving, order, steps)
+    img = AxisArray(moving, order, steps);
 
     ### Compute the mismatch
     baseout = tempname()
     fnmm = string(baseout, ".mm")
-    # devs = 0:2
-    # wait_free(devs)
-    # algorithm = AperturesMismatch[AperturesMismatch(fixed, knots, mxshift; dev=devs[i],pid=wpids[i],correctbias=false) for i = 1:length(wpids)]
     algorithm = AperturesMismatch[AperturesMismatch(fixed, knots, mxshift; pid=wpids[i], correctbias=false) for i = 1:length(wpids)]
     mm_package_loader(algorithm)
     mon = monitor(algorithm, (:Es, :cs, :Qs, :mmis))
@@ -87,9 +63,7 @@ for (sz, mxshift, gridsize, order, steps) in (((150,), (6,), (4,), (:x, :time),(
     den = mmis[2,ntuple(d->Colon(), 2N+1)...]
     for i in CartesianIndices(size(den)[N+1:end])
         den1 = den[ntuple(d->Colon(), N)..., i]
-        # this test doesn't seem valid on the edge of image
-        # RegisterMismatchCommon.safe_get! doesn't get data from padded regions of moving_full
-        # @test_broken (1+1e-8)*minimum(den1) > maximum(den1)
+        @test (1+1e-8)*minimum(den1) > maximum(den1)
     end
 
     # Test that a perfect match was found in each aperture
@@ -110,5 +84,3 @@ for (sz, mxshift, gridsize, order, steps) in (((150,), (6,), (4,), (:x, :time),(
     u = reshape(reinterpret(Float64, vec(ur)), (N, size(ur)...))
     @test maximum(abs.(u-cs)) <= 1e-3
 end
-
-rmprocs(wpids)
