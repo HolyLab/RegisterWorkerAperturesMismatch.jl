@@ -1,10 +1,10 @@
 module RegisterWorkerAperturesMismatch
 
-using Images, CoordinateTransformations, Interpolations, StaticArrays, SharedArrays
+using ImageCore, CoordinateTransformations, Interpolations, StaticArrays, SharedArrays
 using RegisterCore, RegisterDeformation, RegisterFit, RegisterPenalty, RegisterOptimize
 using RegisterMismatchCommon
 # Note: RegisterMismatch/RegisterMismatchCuda is selected below
-using RegisterWorkerShell, RegisterDriver
+using RegisterWorkerShell # , RegisterDriver
 
 import RegisterWorkerShell: worker, init!, close!, load_mm_package
 
