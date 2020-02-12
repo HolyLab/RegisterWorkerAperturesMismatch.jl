@@ -12,7 +12,7 @@ export AperturesMismatch, monitor, monitor!, worker, workerpid
 
 mutable struct AperturesMismatch{A<:AbstractArray,T,K,N} <: AbstractWorker
     fixed::A
-    knots::NTuple{N,K}
+    nodes::NTuple{N,K}
     maxshift::NTuple{N,Int}
     thresh::T
     preprocess  # likely of type PreprocessSNF, but could be a function
@@ -54,7 +54,7 @@ function cuda_init!(algorithm)
     d_fixed  = CuArray{T}(sdata(fixed))
     algorithm.cuda_objects[:d_fixed] = d_fixed
     algorithm.cuda_objects[:d_moving] = similar(d_fixed)
-    gridsize = map(length, algorithm.knots)
+    gridsize = map(length, algorithm.nodes)
     aperture_width = default_aperture_width(algorithm.fixed, gridsize)
     algorithm.cuda_objects[:cms] = CMStorage{T}(undef, aperture_width, algorithm.maxshift)
 end
@@ -70,9 +70,9 @@ end
 
 """
 
-`alg = AperturesMismatch(fixed, knots, maxshift, [preprocess=identity];
+`alg = AperturesMismatch(fixed, nodes, maxshift, [preprocess=identity];
 kwargs...)` creates a worker-object for performing "apertured"
-(blocked) registration.  `fixed` is the reference image, `knots`
+(blocked) registration.  `fixed` is the reference image, `nodes`
 specifies the grid of apertures, `maxshift` represents the largest
 shift (in pixels) that will be evaluated, and `preprocess` allows you
 to apply a transformation (e.g., filtering) to the `moving` images
@@ -93,12 +93,12 @@ pre-processing function, but see also `PreprocessSNF`.
    pp = img -> imfilter_gaussian(img, [3, 3])
    fixed = pp(fixed0)
    # We'll use a 5x7 grid of apertures
-   knots = (linspace(1, size(fixed,1), 5), linspace(1, size(fixed,2), 7))
+   nodes = (linspace(1, size(fixed,1), 5), linspace(1, size(fixed,2), 7))
    # Allow shifts of up to 30 pixels in any direction
    maxshift = (30,30)
 
    # Create the algorithm-object
-   alg = AperturesMismatch(fixed, knots, maxshift, pp)
+   alg = AperturesMismatch(fixed, nodes, maxshift, pp)
 
    mon = monitor(alg, (:Es, :cs, :Qs, :mmis))
 
@@ -107,8 +107,8 @@ pre-processing function, but see also `PreprocessSNF`.
 ```
 
 """
-function AperturesMismatch(fixed, knots::NTuple{N,K}, maxshift, preprocess=identity; normalization=:pixels, thresh_fac=(0.5)^ndims(fixed), thresh=nothing, correctbias::Bool=true, pid=1, dev=-1) where {K,N}
-    gridsize = map(length, knots)
+function AperturesMismatch(fixed, nodes::NTuple{N,K}, maxshift, preprocess=identity; normalization=:pixels, thresh_fac=(0.5)^ndims(fixed), thresh=nothing, correctbias::Bool=true, pid=1, dev=-1) where {K,N}
+    gridsize = map(length, nodes)
     nimages(fixed) == 1 || error("Register to a single image")
     if thresh == nothing
         thresh = (thresh_fac/prod(gridsize)) * (normalization==:pixels ? length(fixed) : sumabs2(fixed))
@@ -120,13 +120,13 @@ function AperturesMismatch(fixed, knots::NTuple{N,K}, maxshift, preprocess=ident
     Qs = ArrayDecl(Array{similar_type(SMatrix, T, Size(N,N)),N}, gridsize)
     mmsize = map(x->2x+1, maxshift)
     mmis = ArrayDecl(Array{NumDenom{T},2*N}, (mmsize...,gridsize...))
-    AperturesMismatch{typeof(fixed),T,K,N}(fixed, knots, maxshift, T(thresh), preprocess, normalization, correctbias, Es, cs, Qs, mmis, pid, dev, Dict{Symbol,Any}())
+    AperturesMismatch{typeof(fixed),T,K,N}(fixed, nodes, maxshift, T(thresh), preprocess, normalization, correctbias, Es, cs, Qs, mmis, pid, dev, Dict{Symbol,Any}())
 end
 
 function worker(algorithm::AperturesMismatch, img, tindex, mon)
     moving0 = getindex_t(img, tindex)
     moving = algorithm.preprocess(moving0)
-    gridsize = map(length, algorithm.knots)
+    gridsize = map(length, algorithm.nodes)
     use_cuda = algorithm.dev >= 0
     if use_cuda
         device!(CuDevice(algorithm.dev))
