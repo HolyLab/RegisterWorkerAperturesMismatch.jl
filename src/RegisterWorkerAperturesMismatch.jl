@@ -2,8 +2,8 @@ module RegisterWorkerAperturesMismatch
 
 using ImageCore, CoordinateTransformations, Interpolations, StaticArrays, SharedArrays
 using RegisterCore, RegisterDeformation, RegisterFit, RegisterPenalty, RegisterOptimize
-using RegisterMismatchCommon
-# Note: RegisterMismatch/RegisterMismatchCuda is selected below
+using RegisterMismatch, RegisterMismatchCommon
+# Note: RegisterMismatchCuda is loaded dynamically below when dev >= 0
 using RegisterWorkerShell # , RegisterDriver
 
 import RegisterWorkerShell: worker, init!, close!, load_mm_package
@@ -30,8 +30,6 @@ end
 function load_mm_package(dev)
     if dev >= 0
         eval(:(using CUDA, RegisterMismatchCuda))
-    else
-        eval(:(using RegisterMismatch))
     end
     nothing
 end
@@ -151,9 +149,11 @@ function worker(algorithm::AperturesMismatch, img, tindex, mon)
     if algorithm.correctbias
         correctbias!(mms)
     end
-    Es = zeros(size(mms))
-    cs = Array{Any}(undef, size(mms))
-    Qs = Array{Any}(undef, size(mms))
+    T = eltype(algorithm.Es)
+    N = length(gridsize)
+    Es = zeros(T, gridsize...)
+    cs = Array{SVector{N,T}}(undef, gridsize...)
+    Qs = Array{similar_type(SMatrix, T, Size(N,N))}(undef, gridsize...)
     thresh = algorithm.thresh
     for i = 1:length(mms)
         Es[i], cs[i], Qs[i] = qfit(mms[i], thresh; opt=false)
@@ -163,9 +163,12 @@ function worker(algorithm::AperturesMismatch, img, tindex, mon)
     monitor!(mon, :Qs, Qs)
     if haskey(mon, :mmis)
         mmis = interpolate_mm!(mms)
-        R = CartesianIndices(size(mon[:mmis])[ndims(mmis)+1:end])
-        colons = ntuple(d->Colon(), ndims(mmis))
-        _copy_mm!(mon[:mmis], mmis, colons, R)
+        N = ndims(mmis)
+        gridsize = size(mmis)
+        coefs1 = first(mmis).data.coefs
+        result = Array{eltype(coefs1)}(undef, size(coefs1)..., gridsize...)
+        _copy_mm!(result, mmis, ntuple(_->Colon(), N), CartesianIndices(gridsize))
+        monitor!(mon, :mmis, result)
     end
     mon
 end

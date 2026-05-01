@@ -7,7 +7,7 @@ gridsize = (5,5)
 ntimes = 4
 shift_amplitude = 5
 u_dfm = shift_amplitude*randn(2, gridsize..., ntimes)
-img = AxisArray(SharedArray{Float64}((size(fixed)..., ntimes), pids = union(myid(), wpids)), :y, :x, :time)
+img = AxisArray(SharedArray{Float64}((size(fixed)..., ntimes)), :y, :x, :time)
 nodes = map(d->range(1, stop=size(fixed,d), length=gridsize[d]), (1,2))
 tax = timeaxis(img)
 for i = 1:ntimes
@@ -17,7 +17,7 @@ end
 # Perform the registration
 fn = joinpath(workdir, "apertured.jld")
 maxshift = (3*shift_amplitude, 3*shift_amplitude)
-algorithms = AperturesMismatch[AperturesMismatch(fixed, nodes, maxshift; pid=p) for p in wpids]
+algorithms = AperturesMismatch[AperturesMismatch(fixed, nodes, maxshift; tid=p) for p in wtids]
 mm_package_loader(algorithms)
 mons = monitor(algorithms, (:Es, :cs, :Qs, :mmis))
 driver(fn, algorithms, img, mons)
@@ -25,7 +25,7 @@ driver(fn, algorithms, img, mons)
 # With preprocessing
 fn_pp = joinpath(workdir, "apertured_pp.jld")
 pp = PreprocessSNF(0.1, [2,2], [10,10])
-algorithms = AperturesMismatch[AperturesMismatch(pp(fixed), nodes, maxshift, pp; pid=p) for p in wpids]
+algorithms = AperturesMismatch[AperturesMismatch(pp(fixed), nodes, maxshift, pp; tid=p) for p in wtids]
 mm_package_loader(algorithms)
 mons = monitor(algorithms, (:Es, :cs, :Qs, :mmis))
 driver(fn_pp, algorithms, img, mons)
@@ -60,7 +60,7 @@ end
 cs, Qs, mmis = jldopen(fn, mmaparrays=true) do file
     read(file, "cs"), read(file, "Qs"), read(file, "mmis")
 end
-ϕs, mismatch = fixed_λ(cs, Qs, nodes, AffinePenalty(nodes, 0.001), 1e-5, mmis)
+ϕs, mismatch = fixed_λ(collect(cs), collect(Qs), nodes, AffinePenalty(nodes, 0.001), 1e-5, collect(mmis))
 for t = 1:nimages(img)
     moving = img[tax(t)]
     warped = warp(moving, ϕs[t])
