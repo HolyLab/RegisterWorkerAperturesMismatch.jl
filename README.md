@@ -1,5 +1,7 @@
 # RegisterWorkerAperturesMismatch.jl
 
+[![Aqua QA](https://juliatesting.github.io/Aqua.jl/dev/assets/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
+
 This package is similar to [RegisterWorkerApertures](https://github.com/HolyLab/RegisterWorkerApertures.jl),
 whose documentation you should consult for an overview.
 This package differs in that it is targeted at "whole experiment" rather than

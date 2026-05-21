@@ -1,16 +1,15 @@
 name = "RegisterWorkerAperturesMismatch"
 uuid = "30e56b64-2659-11e9-2fbf-0524297743d8"
-authors = ["Tim Holy <tim.holy@gmail.com>"]
 version = "1.0.0"
+authors = ["Tim Holy <tim.holy@gmail.com>"]
 
 [deps]
-CoordinateTransformations = "150eb455-5306-5404-9cee-2592286d6298"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+CoordinateTransformations = "150eb455-5306-5404-9cee-2592286d6298"
 ImageCore = "a09fc81d-aa75-5fe9-8630-4744c3626534"
 Interpolations = "a98d9a8b-a2ab-59e6-89dd-64a1c18fca59"
 RegisterCore = "67712758-55e7-5c3c-8e85-dda1d7758434"
 RegisterDeformation = "c19381b7-cf49-59d7-881c-50dfbd227eaf"
-RegisterDriver = "935ac36e-2656-11e9-1e3b-cbaa636797af"
 RegisterFit = "36121b08-3789-5198-aff2-59a3443d9b59"
 RegisterMismatch = "3c0dd727-6833-5f5d-a1e8-c0d421935c74"
 RegisterMismatchCommon = "abb2e897-52bf-5d28-a379-6ca321e3b878"
@@ -22,8 +21,9 @@ SharedArrays = "1a1011a3-84de-559e-8e89-a11a2f7dc383"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 
 [compat]
-CoordinateTransformations = "0.5, 0.6"
+Aqua = "0.8"
 CUDA = "3, 4, 5"
+CoordinateTransformations = "0.5, 0.6"
 ImageCore = "0.8.1, 0.9, 0.10"
 Interpolations = "0.12, 0.13, 0.14, 0.15"
 RegisterCore = "1"
@@ -36,11 +36,14 @@ RegisterMismatchCuda = "1"
 RegisterOptimize = "1"
 RegisterPenalty = "1"
 RegisterWorkerShell = "1"
+SharedArrays = "1"
 StaticArrays = "0.12, 1"
 julia = "1.10"
 
 [extras]
+Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
 AxisArrays = "39de3d68-74b9-583c-8d2d-e117c070f3a9"
+RegisterDriver = "935ac36e-2656-11e9-1e3b-cbaa636797af"
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 ImageAxes = "2803e5a7-5153-5ecf-9a86-9b4c37f5f5ac"
 ImageMagick = "6218d12a-5da1-5696-b52f-db25d2ecc6d1"
@@ -51,4 +54,4 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 TestImages = "5e47fb64-e119-507b-a336-dd2b206d9990"
 
 [targets]
-test = ["Test", "AxisArrays", "ImageAxes", "Distributed", "ImageMagick", "JLD", "PaddedViews", "Pkg", "TestImages"]
+test = ["Aqua", "RegisterDriver", "Test", "AxisArrays", "ImageAxes", "Distributed", "ImageMagick", "JLD", "PaddedViews", "Pkg", "TestImages"]
