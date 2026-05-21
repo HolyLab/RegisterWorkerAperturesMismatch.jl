@@ -114,7 +114,7 @@ pre-processing function, but see also `PreprocessSNF`.
 function AperturesMismatch(fixed, nodes::NTuple{N,K}, maxshift, preprocess=identity; normalization=:pixels, thresh_fac=(0.5)^ndims(fixed), thresh=nothing, correctbias::Bool=true, tid=1, dev=-1) where {K,N}
     gridsize = map(length, nodes)
     nimages(fixed) == 1 || error("Register to a single image")
-    if thresh == nothing
+    if isnothing(thresh)
         thresh = (thresh_fac/prod(gridsize)) * (normalization==:pixels ? length(fixed) : sumabs2(fixed))
     end
     T = eltype(fixed) <: AbstractFloat ? eltype(fixed) : Float32
