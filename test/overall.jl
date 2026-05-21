@@ -43,8 +43,8 @@ for (sz, mxshift, gridsize, order, steps) in (((150,), (6,), (4,), (:x, :time),(
     ### Compute the mismatch
     baseout = tempname()
     fnmm = string(baseout, ".mm")
-    algorithm = AperturesMismatch[AperturesMismatch(fixed, nodes, mxshift; pid=wpids[i], correctbias=false) for i = 1:length(wpids)]
-    mm_package_loader(algorithm)
+    algorithm = AperturesMismatch[AperturesMismatch(fixed, nodes, mxshift; tid=wtids[i], correctbias=false) for i = 1:length(wtids)]
+    prepare_mm_package(algorithm)
     mon = monitor(algorithm, (:Es, :cs, :Qs, :mmis))
 
     driver(fnmm, algorithm, img, mon)
