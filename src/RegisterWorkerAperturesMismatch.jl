@@ -6,7 +6,7 @@ using RegisterMismatch, RegisterMismatchCommon
 # Note: RegisterMismatchCuda is loaded dynamically below when dev >= 0
 using RegisterWorkerShell # , RegisterDriver
 
-import RegisterWorkerShell: worker, init!, close!, load_mm_package
+import RegisterWorkerShell: worker, init!, close!, load_mm_package, workertid
 
 export AperturesMismatch, monitor, monitor!, worker
 
@@ -22,10 +22,12 @@ mutable struct AperturesMismatch{A<:AbstractArray,T,K,N} <: AbstractWorker
     cs
     Qs
     mmis
-    workertid::Int
+    tid::Int
     dev::Int
     cuda_objects::Dict{Symbol,Any}
 end
+
+workertid(w::AperturesMismatch) = w.tid
 
 function load_mm_package(dev)
     if dev >= 0
