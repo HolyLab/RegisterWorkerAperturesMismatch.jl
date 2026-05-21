@@ -5,12 +5,17 @@ using RegisterCore, RegisterOptimize, RegisterDeformation, RegisterPenalty
 using RegisterMismatchCommon
 using RegisterWorkerAperturesMismatch, RegisterDriver
 using Aqua
+using ExplicitImports
 
 @testset "Aqua" begin
     Aqua.test_all(RegisterWorkerAperturesMismatch;
         stale_deps=(; ignore=[:CUDA, :RegisterMismatchCuda]),
         deps_compat=(; check_extras=false),
         piracies=(; treat_as_own=[RegisterWorkerAperturesMismatch.load_mm_package]))
+end
+
+@testset "ExplicitImports" begin
+    test_explicit_imports(RegisterWorkerAperturesMismatch; report_non_public=true)
 end
 
 nt = 3  # number of time points
