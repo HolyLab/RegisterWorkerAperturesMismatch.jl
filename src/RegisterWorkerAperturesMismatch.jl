@@ -111,7 +111,7 @@ pre-processing function, but see also `PreprocessSNF`.
 ```
 
 """
-function AperturesMismatch(fixed, nodes::NTuple{N,K}, maxshift, preprocess=identity; normalization=:pixels, thresh_fac=(0.5)^ndims(fixed), thresh=nothing, correctbias::Bool=true, tid=1, dev=-1) where {K,N}
+function AperturesMismatch(fixed, nodes::NTuple{N,K}, maxshift::NTuple{N,<:Integer}, preprocess=identity; normalization=:pixels, thresh_fac=(0.5)^ndims(fixed), thresh=nothing, correctbias::Bool=true, tid=1, dev=-1) where {K,N}
     gridsize = map(length, nodes)
     nimages(fixed) == 1 || error("Register to a single image")
     if isnothing(thresh)
