@@ -3,7 +3,7 @@ module RegisterWorkerAperturesMismatch
 using ImageCore, CoordinateTransformations, Interpolations, StaticArrays, SharedArrays
 using RegisterCore, RegisterDeformation, RegisterFit, RegisterPenalty, RegisterOptimize
 using RegisterMismatch, RegisterMismatchCommon
-# Note: RegisterMismatchCuda is loaded dynamically below when dev >= 0
+# Note: RegisterMismatchCuda is loaded dynamically below when dev !== nothing
 using RegisterWorkerShell # , RegisterDriver
 
 import RegisterWorkerShell: worker, init!, close!, load_mm_package, workertid
@@ -23,21 +23,21 @@ mutable struct AperturesMismatch{A<:AbstractArray,T,K,N} <: AbstractWorker
     Qs
     mmis
     tid::Int
-    dev::Int
+    dev::Union{Nothing,Int}
     cuda_objects::Dict{Symbol,Any}
 end
 
 workertid(w::AperturesMismatch) = w.tid
 
 function load_mm_package(dev)
-    if dev >= 0
+    if dev !== nothing
         eval(:(using CUDA, RegisterMismatchCuda))
     end
     nothing
 end
 
 function init!(algorithm::AperturesMismatch)
-    if algorithm.dev >= 0
+    if algorithm.dev !== nothing
         cuda_init!(algorithm)
     end
     nothing
@@ -66,8 +66,8 @@ function cuda_init!(algorithm)
 end
 
 function close!(algorithm::AperturesMismatch)
-    if algorithm.dev >= 0
-        if old_active_context != nothing
+    if algorithm.dev !== nothing
+        if !isnothing(old_active_context)
             activate(old_active_context)
         end
     end
@@ -113,7 +113,7 @@ pre-processing function, but see also `PreprocessSNF`.
 ```
 
 """
-function AperturesMismatch(fixed, nodes::NTuple{N,K}, maxshift::NTuple{N,<:Integer}, preprocess=identity; normalization=:pixels, thresh_fac=(0.5)^ndims(fixed), thresh=nothing, correctbias::Bool=true, tid=1, dev=-1) where {K,N}
+function AperturesMismatch(fixed, nodes::NTuple{N,K}, maxshift::NTuple{N,<:Integer}, preprocess=identity; normalization=:pixels, thresh_fac=(0.5)^ndims(fixed), thresh=nothing, correctbias::Bool=true, tid=1, dev=nothing) where {K,N}
     gridsize = map(length, nodes)
     nimages(fixed) == 1 || error("Register to a single image")
     if isnothing(thresh)
@@ -133,7 +133,7 @@ function worker(algorithm::AperturesMismatch, img, tindex, mon)
     moving0 = getindex_t(img, tindex)
     moving = algorithm.preprocess(moving0)
     gridsize = map(length, algorithm.nodes)
-    use_cuda = algorithm.dev >= 0
+    use_cuda = algorithm.dev !== nothing
     if use_cuda
         device!(CuDevice(algorithm.dev))
         d_fixed  = algorithm.cuda_objects[:d_fixed]
