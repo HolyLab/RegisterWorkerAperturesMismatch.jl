@@ -21,7 +21,7 @@ import RegisterWorkerShell: worker, init!, close!, load_mm_package, workertid
 
 export AperturesMismatch, monitor, monitor!, worker
 
-mutable struct AperturesMismatch{A<:AbstractArray,T,K,N} <: AbstractWorker
+struct AperturesMismatch{A<:AbstractArray,T,K,N} <: AbstractWorker
     fixed::A
     nodes::NTuple{N,K}
     maxshift::NTuple{N,Int}
