@@ -18,7 +18,7 @@ end
 fn = joinpath(workdir, "apertured.jld")
 maxshift = (3*shift_amplitude, 3*shift_amplitude)
 algorithms = AperturesMismatch[AperturesMismatch(fixed, nodes, maxshift; tid=p) for p in wtids]
-mm_package_loader(algorithms)
+prepare_mm_package(algorithms)
 mons = monitor(algorithms, (:Es, :cs, :Qs, :mmis))
 driver(fn, algorithms, img, mons)
 
@@ -26,7 +26,7 @@ driver(fn, algorithms, img, mons)
 fn_pp = joinpath(workdir, "apertured_pp.jld")
 pp = PreprocessSNF(0.1, [2,2], [10,10])
 algorithms = AperturesMismatch[AperturesMismatch(pp(fixed), nodes, maxshift, pp; tid=p) for p in wtids]
-mm_package_loader(algorithms)
+prepare_mm_package(algorithms)
 mons = monitor(algorithms, (:Es, :cs, :Qs, :mmis))
 driver(fn_pp, algorithms, img, mons)
 
@@ -34,7 +34,7 @@ driver(fn_pp, algorithms, img, mons)
 if !(haskey(ENV,"CI")&&(ENV["CI"]=="true"))
     fn_cuda = joinpath(workdir, "apertured_cuda.jld")
     algorithm = AperturesMismatch(pp(fixed), nodes, maxshift, pp; dev=0)
-    mm_package_loader(algorithm)
+    prepare_mm_package(algorithm)
     mons = monitor(algorithms, (:Es, :cs, :Qs, :mmis))
     driver(fn_cuda, algorithms, img, mons)
 end
@@ -60,7 +60,7 @@ end
 cs, Qs, mmis = jldopen(fn, mmaparrays=true) do file
     read(file, "cs"), read(file, "Qs"), read(file, "mmis")
 end
-ϕs, mismatch = fixed_λ(collect(cs), collect(Qs), nodes, AffinePenalty(nodes, 0.001), 1e-5, collect(mmis))
+ϕs, mismatch = fixed_λ(Float64.(collect(cs)), Float64.(collect(Qs)), nodes, AffinePenalty(nodes, 0.001), Float64.(collect(mmis)); λt=1e-5)
 for t = 1:nimages(img)
     moving = img[tax(t)]
     warped = warp(moving, ϕs[t])

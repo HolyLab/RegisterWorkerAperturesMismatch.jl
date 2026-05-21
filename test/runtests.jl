@@ -10,3 +10,4 @@ wtids = threadids()
 
 include("overall.jl") # from BlockRegistration.jl
 include("aperturedmm.jl")
+include("internals.jl")
