@@ -34,10 +34,10 @@ import RegisterWorkerShell: worker, init!, close!, load_mm_package, workertid
 
 export AperturesMismatch, monitor, monitor!, worker
 
-struct AperturesMismatch{A<:AbstractArray,T,K,N} <: AbstractWorker
+struct AperturesMismatch{A <: AbstractArray, T, K, N} <: AbstractWorker
     fixed::A
-    nodes::NTuple{N,K}
-    maxshift::NTuple{N,Int}
+    nodes::NTuple{N, K}
+    maxshift::NTuple{N, Int}
     thresh::T
     preprocess  # likely of type PreprocessSNF, but could be a function
     normalization::Symbol
@@ -47,8 +47,8 @@ struct AperturesMismatch{A<:AbstractArray,T,K,N} <: AbstractWorker
     Qs
     mmis
     tid::Int
-    dev::Union{Nothing,Int}
-    cuda_objects::Dict{Symbol,Any}
+    dev::Union{Nothing, Int}
+    cuda_objects::Dict{Symbol, Any}
 end
 
 workertid(w::AperturesMismatch) = w.tid
@@ -57,14 +57,14 @@ function load_mm_package(dev)
     if dev !== nothing
         eval(:(using CUDA, RegisterMismatchCuda))
     end
-    nothing
+    return nothing
 end
 
 function init!(algorithm::AperturesMismatch)
     if algorithm.dev !== nothing
         cuda_init!(algorithm)
     end
-    nothing
+    return nothing
 end
 
 function cuda_init!(algorithm)
@@ -81,12 +81,12 @@ function cuda_init!(algorithm)
     end
     fixed = algorithm.fixed
     T = cudatype(eltype(fixed))
-    d_fixed  = CuArray{T}(sdata(fixed))
+    d_fixed = CuArray{T}(sdata(fixed))
     algorithm.cuda_objects[:d_fixed] = d_fixed
     algorithm.cuda_objects[:d_moving] = similar(d_fixed)
     gridsize = map(length, algorithm.nodes)
     aperture_width = default_aperture_width(algorithm.fixed, gridsize)
-    algorithm.cuda_objects[:cms] = CMStorage{T}(undef, aperture_width, algorithm.maxshift)
+    return algorithm.cuda_objects[:cms] = CMStorage{T}(undef, aperture_width, algorithm.maxshift)
 end
 
 function close!(algorithm::AperturesMismatch)
@@ -95,7 +95,7 @@ function close!(algorithm::AperturesMismatch)
             activate(old_active_context)
         end
     end
-    nothing
+    return nothing
 end
 
 """
@@ -162,21 +162,20 @@ mon = worker(alg, moving0, 1, mon)
 size(mon[:cs])  # (5, 7)
 ```
 """
-function AperturesMismatch(fixed, nodes::NTuple{N}, maxshift::NTuple{N,<:Integer}, preprocess=identity; normalization=:pixels, thresh_fac=(0.5)^ndims(fixed), thresh=nothing, correctbias::Bool=true, tid=1, dev=nothing) where {N}
-    K = eltype(nodes)
+function AperturesMismatch(fixed, nodes::NTuple{N, K}, maxshift::NTuple{N, <:Integer}, preprocess = identity; normalization = :pixels, thresh_fac = (0.5)^ndims(fixed), thresh = nothing, correctbias::Bool = true, tid = 1, dev = nothing) where {K, N}
     gridsize = map(length, nodes)
     nimages(fixed) == 1 || error("Register to a single image")
     if isnothing(thresh)
-        thresh = (thresh_fac/prod(gridsize)) * (normalization==:pixels ? length(fixed) : sumabs2(fixed))
+        thresh = (thresh_fac / prod(gridsize)) * (normalization == :pixels ? length(fixed) : sumabs2(fixed))
     end
     T = eltype(fixed) <: AbstractFloat ? eltype(fixed) : Float32
     # T = Float64   # Ipopt requires Float64
-    Es = ArrayDecl(Array{T,N}, gridsize)
-    cs = ArrayDecl(Array{SVector{N,T},N}, gridsize)
-    Qs = ArrayDecl(Array{similar_type(SMatrix, T, Size(N,N)),N}, gridsize)
-    mmsize = map(x->2x+1, maxshift)
-    mmis = ArrayDecl(Array{NumDenom{T},2*N}, (mmsize...,gridsize...))
-    AperturesMismatch{typeof(fixed),T,K,N}(fixed, nodes, maxshift, T(thresh), preprocess, normalization, correctbias, Es, cs, Qs, mmis, tid, dev, Dict{Symbol,Any}())
+    Es = ArrayDecl(Array{T, N}, gridsize)
+    cs = ArrayDecl(Array{SVector{N, T}, N}, gridsize)
+    Qs = ArrayDecl(Array{similar_type(SMatrix, T, Size(N, N)), N}, gridsize)
+    mmsize = map(x -> 2x + 1, maxshift)
+    mmis = ArrayDecl(Array{NumDenom{T}, 2 * N}, (mmsize..., gridsize...))
+    return AperturesMismatch{typeof(fixed), T, K, N}(fixed, nodes, maxshift, T(thresh), preprocess, normalization, correctbias, Es, cs, Qs, mmis, tid, dev, Dict{Symbol, Any}())
 end
 
 """
@@ -202,16 +201,16 @@ function worker(algorithm::AperturesMismatch, img, tindex, mon)
     use_cuda = algorithm.dev !== nothing
     if use_cuda
         device!(CuDevice(algorithm.dev))
-        d_fixed  = algorithm.cuda_objects[:d_fixed]
+        d_fixed = algorithm.cuda_objects[:d_fixed]
         d_moving = algorithm.cuda_objects[:d_moving]
-        cms      = algorithm.cuda_objects[:cms]
+        cms = algorithm.cuda_objects[:cms]
         copyto!(d_moving, moving)
         cs = coords_spatial(img)
-        aperture_centers = aperture_grid(map(d->size(img,d),cs), gridsize)
+        aperture_centers = aperture_grid(map(d -> size(img, d), cs), gridsize)
         mms = allocate_mmarrays(eltype(cms), gridsize, algorithm.maxshift)
-        mismatch_apertures!(mms, d_fixed, d_moving, aperture_centers, cms; normalization=algorithm.normalization)
+        mismatch_apertures!(mms, d_fixed, d_moving, aperture_centers, cms; normalization = algorithm.normalization)
     else
-        mms = mismatch_apertures(algorithm.fixed, moving, gridsize, algorithm.maxshift; normalization=algorithm.normalization)
+        mms = mismatch_apertures(algorithm.fixed, moving, gridsize, algorithm.maxshift; normalization = algorithm.normalization)
     end
     # displaymismatch(mms, thresh=10)
     if algorithm.correctbias
@@ -220,11 +219,11 @@ function worker(algorithm::AperturesMismatch, img, tindex, mon)
     T = eltype(algorithm.Es)
     N = length(gridsize)
     Es = zeros(T, gridsize...)
-    cs = Array{SVector{N,T}}(undef, gridsize...)
-    Qs = Array{similar_type(SMatrix, T, Size(N,N))}(undef, gridsize...)
+    cs = Array{SVector{N, T}}(undef, gridsize...)
+    Qs = Array{similar_type(SMatrix, T, Size(N, N))}(undef, gridsize...)
     thresh = algorithm.thresh
-    for i = 1:length(mms)
-        Es[i], cs[i], Qs[i] = qfit(mms[i], thresh; opt=false)
+    for i in 1:length(mms)
+        Es[i], cs[i], Qs[i] = qfit(mms[i], thresh; opt = false)
     end
     monitor!(mon, :Es, Es)
     monitor!(mon, :cs, cs)
@@ -235,20 +234,20 @@ function worker(algorithm::AperturesMismatch, img, tindex, mon)
         gridsize = size(mmis)
         coefs1 = first(mmis).data.coefs
         result = Array{eltype(coefs1)}(undef, size(coefs1)..., gridsize...)
-        _copy_mm!(result, mmis, ntuple(_->Colon(), N), CartesianIndices(gridsize))
+        _copy_mm!(result, mmis, ntuple(_ -> Colon(), N), CartesianIndices(gridsize))
         monitor!(mon, :mmis, result)
     end
-    mon
+    return mon
 end
 
 function _copy_mm!(dest, src, colons, R)
     for (I, mm) in zip(R, src)
         dest[colons..., I] = mm.data.coefs
     end
-    dest
+    return dest
 end
 
-cudatype(::Type{T}) where {T<:Union{Float32,Float64}} = T
+cudatype(::Type{T}) where {T <: Union{Float32, Float64}} = T
 cudatype(::Any) = Float32
 
 end # module
