@@ -1,18 +1,42 @@
+"""
+    RegisterWorkerAperturesMismatch
+
+Worker for aperture-based (blocked) image registration using mismatch polynomials.
+
+Divides the image domain into a grid of apertures and estimates a local shift for
+each aperture by fitting a quadratic to the mismatch array. Implements the
+[`AbstractWorker`](@ref RegisterWorkerShell.AbstractWorker) interface from
+`RegisterWorkerShell`; the primary entry points are [`AperturesMismatch`](@ref)
+(constructor) and [`worker`](@ref) (single-frame registration).
+
+CUDA-accelerated computation is supported when `dev` is set to a device index.
+"""
 module RegisterWorkerAperturesMismatch
 
-using ImageCore, CoordinateTransformations, Interpolations, StaticArrays, SharedArrays
-using RegisterCore, RegisterDeformation, RegisterFit, RegisterPenalty, RegisterOptimize
-using RegisterMismatch, RegisterMismatchCommon
+using CoordinateTransformations: CoordinateTransformations
+using ImageCore: ImageCore, coords_spatial, nimages
+using Interpolations: Interpolations
+using RegisterCore: RegisterCore, NumDenom, maxshift
+using RegisterDeformation: RegisterDeformation
+using RegisterFit: RegisterFit, qfit
+using RegisterMismatch: RegisterMismatch, CMStorage, mismatch_apertures!
+using RegisterMismatchCommon: RegisterMismatchCommon, allocate_mmarrays, aperture_grid,
+                              correctbias, correctbias!, default_aperture_width, mismatch_apertures
+using RegisterOptimize: RegisterOptimize
+using RegisterPenalty: RegisterPenalty, interpolate_mm!
+using RegisterWorkerShell: RegisterWorkerShell, AbstractWorker, ArrayDecl, getindex_t,
+                           monitor, monitor!
+using SharedArrays: SharedArrays, sdata
+using StaticArrays: StaticArrays, SMatrix, SVector, Size, similar_type
 # Note: RegisterMismatchCuda is loaded dynamically below when dev !== nothing
-using RegisterWorkerShell # , RegisterDriver
 
 import RegisterWorkerShell: worker, init!, close!, load_mm_package, workertid
 
 export AperturesMismatch, monitor, monitor!, worker
 
-mutable struct AperturesMismatch{A <: AbstractArray, T, K, N} <: AbstractWorker
+struct AperturesMismatch{A <: AbstractArray, T, N} <: AbstractWorker
     fixed::A
-    nodes::NTuple{N, K}
+    nodes::NTuple{N}
     maxshift::NTuple{N, Int}
     thresh::T
     preprocess  # likely of type PreprocessSNF, but could be a function
@@ -75,45 +99,70 @@ function close!(algorithm::AperturesMismatch)
 end
 
 """
+    AperturesMismatch(fixed, nodes, maxshift, preprocess=identity;
+                      normalization=:pixels, thresh_fac=0.5^ndims(fixed),
+                      thresh=nothing, correctbias=true, tid=1, dev=nothing)
 
-`alg = AperturesMismatch(fixed, nodes, maxshift, [preprocess=identity];
-kwargs...)` creates a worker-object for performing "apertured"
-(blocked) registration.  `fixed` is the reference image, `nodes`
-specifies the grid of apertures, `maxshift` represents the largest
-shift (in pixels) that will be evaluated, and `preprocess` allows you
-to apply a transformation (e.g., filtering) to the `moving` images
-before registration; `fixed` should already have any such
-transformations applied.
+Create a worker object for aperture-based (blocked) image registration.
 
-Registration is performed by calling `driver`.  You should monitor
-`Es`, `cs`, `Qs`, and `mmis`.
+`fixed` is the reference image. `nodes` is an `N`-tuple of ranges or
+vectors specifying the aperture grid along each spatial dimension.
+`maxshift` is an `N`-tuple of integers giving the maximum shift (in
+pixels) to evaluate along each dimension. `preprocess` is an optional
+function applied to each `moving` image before registration; `fixed`
+should already have the same transformation applied.
 
-## Example
+# Keyword arguments
 
-Suppose your images are somewhat noisy, in which case a bit of
-smoothing might help considerably.  Here we'll illustrate the use of a
-pre-processing function, but see also `PreprocessSNF`.
+- `normalization`: `:pixels` (default) normalizes mismatch by the number
+  of pixels in each aperture; `:intensity` normalizes by image intensity.
+- `thresh_fac`: sets the default threshold as `thresh_fac / prod(gridsize)`
+  times the image norm. Ignored when `thresh` is supplied explicitly.
+- `thresh`: minimum mismatch energy required to fit a quadratic. Apertures
+  below threshold are skipped. Defaults to a value derived from `thresh_fac`.
+- `correctbias`: if `true` (default), applies bias correction to the
+  mismatch arrays before fitting.
+- `tid`: worker thread id (default `1`).
+- `dev`: CUDA device index (`Int`). If `nothing` (default), runs on CPU.
 
+The returned object is an `AbstractWorker` subtype. Use [`monitor`](@ref)
+to create a monitoring dict, then [`worker`](@ref) (or `driver`) to run
+registration. The key monitored quantities are:
+- `:Es` — per-aperture mismatch energy
+- `:cs` — per-aperture shift estimates
+- `:Qs` — per-aperture quadratic curvature matrices
+- `:mmis` — interpolated mismatch arrays (optional, expensive to store)
+
+# Examples
+
+Basic usage with a 4×4 aperture grid:
+
+```julia
+fixed = rand(Float32, 64, 64)
+nodes = (range(1, 64, length=4), range(1, 64, length=4))
+maxshift = (5, 5)
+alg = AperturesMismatch(fixed, nodes, maxshift)
+mon = monitor(alg, (:Es, :cs, :Qs))
+moving = rand(Float32, 64, 64)
+mon = worker(alg, moving, 1, mon)
+size(mon[:Es])  # (4, 4)
 ```
-   # Raw images are fixed0 and moving0, both two-dimensional
-   pp = img -> imfilter_gaussian(img, [3, 3])
-   fixed = pp(fixed0)
-   # We'll use a 5x7 grid of apertures
-   nodes = (linspace(1, size(fixed,1), 5), linspace(1, size(fixed,2), 7))
-   # Allow shifts of up to 30 pixels in any direction
-   maxshift = (30,30)
 
-   # Create the algorithm-object
-   alg = AperturesMismatch(fixed, nodes, maxshift, pp)
+With a preprocessing function applied to both `fixed` and each `moving` image:
 
-   mon = monitor(alg, (:Es, :cs, :Qs, :mmis))
-
-   # Run the algorithm
-   mon = driver(algorithm, moving0, mon)
+```julia
+fixed0 = rand(Float32, 64, 64)
+pp = img -> img ./ (maximum(img) + eps(Float32))
+fixed = pp(fixed0)
+nodes = (range(1, 64, length=5), range(1, 64, length=7))
+alg = AperturesMismatch(fixed, nodes, (10, 10), pp)
+mon = monitor(alg, (:Es, :cs, :Qs))
+moving0 = rand(Float32, 64, 64)
+mon = worker(alg, moving0, 1, mon)
+size(mon[:cs])  # (5, 7)
 ```
-
 """
-function AperturesMismatch(fixed, nodes::NTuple{N, K}, maxshift::NTuple{N, <:Integer}, preprocess = identity; normalization = :pixels, thresh_fac = (0.5)^ndims(fixed), thresh = nothing, correctbias::Bool = true, tid = 1, dev = nothing) where {K, N}
+function AperturesMismatch(fixed, nodes::NTuple{N}, maxshift::NTuple{N, <:Integer}, preprocess = identity; normalization = :pixels, thresh_fac = (0.5)^ndims(fixed), thresh = nothing, correctbias::Bool = true, tid = 1, dev = nothing) where {N}
     gridsize = map(length, nodes)
     nimages(fixed) == 1 || error("Register to a single image")
     if isnothing(thresh)
@@ -126,9 +175,25 @@ function AperturesMismatch(fixed, nodes::NTuple{N, K}, maxshift::NTuple{N, <:Int
     Qs = ArrayDecl(Array{similar_type(SMatrix, T, Size(N, N)), N}, gridsize)
     mmsize = map(x -> 2x + 1, maxshift)
     mmis = ArrayDecl(Array{NumDenom{T}, 2 * N}, (mmsize..., gridsize...))
-    return AperturesMismatch{typeof(fixed), T, K, N}(fixed, nodes, maxshift, T(thresh), preprocess, normalization, correctbias, Es, cs, Qs, mmis, tid, dev, Dict{Symbol, Any}())
+    return AperturesMismatch{typeof(fixed), T, N}(fixed, nodes, maxshift, T(thresh), preprocess, normalization, correctbias, Es, cs, Qs, mmis, tid, dev, Dict{Symbol, Any}())
 end
 
+"""
+    worker(algorithm::AperturesMismatch, img, tindex, mon) -> mon
+
+Perform aperture-based mismatch registration for a single image frame.
+
+`img` is the source of moving images. If `img` has a time axis, `tindex`
+selects the frame; otherwise `img` itself is used directly. `mon` is the
+monitoring dict returned by `monitor`; any keys present in `mon` (`:Es`,
+`:cs`, `:Qs`, `:mmis`) are updated with the results of this call.
+
+Returns `mon` with updated fields:
+- `:Es` — per-aperture mismatch energy (scalar per aperture)
+- `:cs` — per-aperture shift estimates (`SVector{N}` per aperture)
+- `:Qs` — per-aperture quadratic curvature matrices (`SMatrix{N,N}` per aperture)
+- `:mmis` — interpolated mismatch arrays (present only if `:mmis` key was in `mon`)
+"""
 function worker(algorithm::AperturesMismatch, img, tindex, mon)
     moving0 = getindex_t(img, tindex)
     moving = algorithm.preprocess(moving0)
