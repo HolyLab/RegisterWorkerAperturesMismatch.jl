@@ -11,7 +11,10 @@ using ExplicitImports
     Aqua.test_all(RegisterWorkerAperturesMismatch;
         stale_deps=(; ignore=[:CUDA, :RegisterMismatchCuda]),
         deps_compat=(; check_extras=false),
-        piracies=(; treat_as_own=[RegisterWorkerAperturesMismatch.load_mm_package]))
+        piracies=(; treat_as_own=[RegisterWorkerAperturesMismatch.load_mm_package]),
+        # AtomixCUDAExt declares __precompile__(false), which is disallowed during
+        # precompilation on Julia 1.10, causing a spurious persistent_tasks failure.
+        persistent_tasks=VERSION >= v"1.11")
 end
 
 @testset "ExplicitImports" begin
