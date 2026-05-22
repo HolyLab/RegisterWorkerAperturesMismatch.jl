@@ -34,9 +34,9 @@ import RegisterWorkerShell: worker, init!, close!, load_mm_package, workertid
 
 export AperturesMismatch, monitor, monitor!, worker
 
-struct AperturesMismatch{A <: AbstractArray, T, K, N} <: AbstractWorker
+struct AperturesMismatch{A <: AbstractArray, T, N} <: AbstractWorker
     fixed::A
-    nodes::NTuple{N, K}
+    nodes::NTuple{N}
     maxshift::NTuple{N, Int}
     thresh::T
     preprocess  # likely of type PreprocessSNF, but could be a function
@@ -163,7 +163,6 @@ size(mon[:cs])  # (5, 7)
 ```
 """
 function AperturesMismatch(fixed, nodes::NTuple{N}, maxshift::NTuple{N, <:Integer}, preprocess = identity; normalization = :pixels, thresh_fac = (0.5)^ndims(fixed), thresh = nothing, correctbias::Bool = true, tid = 1, dev = nothing) where {N}
-    K = eltype(nodes)
     gridsize = map(length, nodes)
     nimages(fixed) == 1 || error("Register to a single image")
     if isnothing(thresh)
@@ -176,7 +175,7 @@ function AperturesMismatch(fixed, nodes::NTuple{N}, maxshift::NTuple{N, <:Intege
     Qs = ArrayDecl(Array{similar_type(SMatrix, T, Size(N, N)), N}, gridsize)
     mmsize = map(x -> 2x + 1, maxshift)
     mmis = ArrayDecl(Array{NumDenom{T}, 2 * N}, (mmsize..., gridsize...))
-    return AperturesMismatch{typeof(fixed), T, K, N}(fixed, nodes, maxshift, T(thresh), preprocess, normalization, correctbias, Es, cs, Qs, mmis, tid, dev, Dict{Symbol, Any}())
+    return AperturesMismatch{typeof(fixed), T, N}(fixed, nodes, maxshift, T(thresh), preprocess, normalization, correctbias, Es, cs, Qs, mmis, tid, dev, Dict{Symbol, Any}())
 end
 
 """
