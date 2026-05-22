@@ -1,4 +1,4 @@
-using SharedArrays, JLD, Test
+using SharedArrays, JLD, Test, CUDA
 using ImageCore, ImageAxes, TestImages, StaticArrays, PaddedViews
 using AxisArrays: AxisArray
 using RegisterCore, RegisterOptimize, RegisterDeformation, RegisterPenalty
