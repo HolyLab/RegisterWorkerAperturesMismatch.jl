@@ -15,7 +15,7 @@ using ExplicitImports
 end
 
 @testset "ExplicitImports" begin
-    test_explicit_imports(RegisterWorkerAperturesMismatch; report_non_public=true)
+    test_explicit_imports(RegisterWorkerAperturesMismatch)
 end
 
 nt = 3  # number of time points

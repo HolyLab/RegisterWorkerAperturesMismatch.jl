@@ -35,8 +35,8 @@ if !(haskey(ENV,"CI")&&(ENV["CI"]=="true"))
     fn_cuda = joinpath(workdir, "apertured_cuda.jld")
     algorithm = AperturesMismatch(pp(fixed), nodes, maxshift, pp; dev=0)
     prepare_mm_package(algorithm)
-    mons = monitor(algorithms, (:Es, :cs, :Qs, :mmis))
-    driver(fn_cuda, algorithms, img, mons)
+    mons = monitor([algorithm], (:Es, :cs, :Qs, :mmis))
+    driver(fn_cuda, [algorithm], img, mons)
 end
 
 fns = [fn, fn_pp]
